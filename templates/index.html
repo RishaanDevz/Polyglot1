@@ -1,0 +1,233 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Polyglot</title>
+
+    <link rel="stylesheet" href="https://stackpath.bootstrapcdn.com/bootstrap/4.5.2/css/bootstrap.min.css">
+    <link rel="stylesheet" href="{{ url_for('static', filename='style.css') }}">
+    <style>
+        .audio-bar {
+            position: fixed;
+            bottom: 0;
+            left: 0;
+            width: 100%;
+            background-color: #333;
+            padding: 10px;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            z-index: 1000;
+        }
+        .audio-controls {
+            display: flex;
+            align-items: center;
+            gap: 10px;
+        }
+        .progress-bar {
+            flex-grow: 1;
+            height: 5px;
+            background-color: #555;
+            cursor: pointer;
+        }
+        .progress {
+            height: 100%;
+            background-color: white;
+            width: 0;
+        }
+        body {
+            padding-bottom: 60px;
+        }
+    </style>
+</head>
+<body class="bg-dark text-light">
+    <div class="container mt-5">
+        <a href="https://imgbb.com/"><img src="https://i.ibb.co/kDt7nDC/IMG-3289-removebg-preview.png" alt="IMG-3289-removebg-preview" border="0"></a>
+
+        <form id="translationForm" method="POST">
+            <div class="form-group">
+                <label for="language1" class="text-purple">Source Language:</label>
+                <select name="language1" id="language1" class="form-control bg-secondary text-light">
+                    {% for lang in languages %}
+                        <option value="{{ lang }}">{{ lang }}</option>
+                    {% endfor %}
+                </select>
+            </div>
+            <div class="form-group">
+                <label for="language2" class="text-purple">Target Language:</label>
+                <select name="language2" id="language2" class="form-control bg-secondary text-light">
+                    {% for lang in languages %}
+                        <option value="{{ lang }}">{{ lang }}</option>
+                    {% endfor %}
+                </select>
+            </div>
+            <div class="form-group">
+                <label for="text" class="text-purple">Text to Translate:</label>
+                <textarea name="text" id="text" class="form-control bg-secondary text-light" required></textarea>
+            </div>
+            <button type="submit" class="btn btn-purple btn-block">Translate and Generate Audio</button>
+        </form>
+
+        <button id="recordButton" class="btn btn-purple btn-block mt-3">Hold Space to Record Audio</button>
+
+        <div id="translationResult" class="mt-4" style="display: none;">
+            <h2 class="text-purple">Translation:</h2>
+            <p id="translationText"></p>
+        </div>
+
+        <div id="audioResult" class="mt-4" style="display: none;">
+            <h2 class="text-purple">Audio:</h2>
+            <audio id="audio" hidden>
+                <source id="audioSource" src="" type="audio/wav">
+                Your browser does not support the audio element.
+            </audio>
+        </div>
+    </div>
+
+    <div class="audio-bar" id="audioBar" style="display: none;">
+        <div class="audio-controls">
+            <button id="playPauseButton" class="btn btn-purple">Play</button>
+            <div class="progress-bar">
+                <div class="progress" id="audioProgress"></div>
+            </div>
+            <span id="currentTime">0:00</span> / <span id="duration">0:00</span>
+            <button id="speedButton" class="btn btn-purple">Speed: 1x</button>
+        </div>
+    </div>
+
+    <script>
+        let mediaRecorder;
+        let audioChunks = [];
+        const recordButton = document.getElementById('recordButton');
+        const translationForm = document.getElementById('translationForm');
+        const audioElement = document.getElementById('audio');
+        const audioSource = document.getElementById('audioSource');
+        const audioBar = document.getElementById('audioBar');
+        const playPauseButton = document.getElementById('playPauseButton');
+        const audioProgress = document.getElementById('audioProgress');
+        const currentTimeSpan = document.getElementById('currentTime');
+        const durationSpan = document.getElementById('duration');
+        const speedButton = document.getElementById('speedButton');
+
+        let playbackSpeed = 1;
+
+        const startRecording = async () => {
+            const stream = await navigator.mediaDevices.getUserMedia({ audio: true });
+            mediaRecorder = new MediaRecorder(stream);
+
+            mediaRecorder.ondataavailable = (event) => {
+                audioChunks.push(event.data);
+            };
+
+            mediaRecorder.onstop = async () => {
+                const audioBlob = new Blob(audioChunks, { type: 'audio/wav' });
+                audioChunks = [];
+
+                const formData = new FormData();
+                formData.append('audio', audioBlob, 'recording.wav');
+
+                try {
+                    const response = await fetch('/transcribe', {
+                        method: 'POST',
+                        body: formData
+                    });
+                    const data = await response.json();
+                    if (data.transcription) {
+                        document.getElementById('text').value = data.transcription;
+                        translationForm.dispatchEvent(new Event('submit'));
+                    } else {
+                        alert('Transcription failed. Please try again.');
+                    }
+                } catch (error) {
+                    console.error('Error:', error);
+                    alert('An error occurred. Please try again.');
+                }
+            };
+
+            mediaRecorder.start();
+            recordButton.textContent = 'Recording...';
+        };
+
+        const stopRecording = () => {
+            if (mediaRecorder && mediaRecorder.state === "recording") {
+                mediaRecorder.stop();
+                recordButton.textContent = 'Hold Space to Record Audio';
+            }
+        };
+
+        document.addEventListener('keydown', (event) => {
+            if (event.code === 'Space' && mediaRecorder?.state !== "recording") {
+                startRecording();
+            }
+        });
+
+        document.addEventListener('keyup', (event) => {
+            if (event.code === 'Space' && mediaRecorder?.state === "recording") {
+                stopRecording();
+            }
+        });
+
+        audioElement.addEventListener('loadedmetadata', () => {
+            durationSpan.textContent = formatTime(audioElement.duration);
+        });
+
+        audioElement.addEventListener('timeupdate', () => {
+            const progress = (audioElement.currentTime / audioElement.duration) * 100;
+            audioProgress.style.width = `${progress}%`;
+            currentTimeSpan.textContent = formatTime(audioElement.currentTime);
+        });
+
+        playPauseButton.addEventListener('click', () => {
+            if (audioElement.paused) {
+                audioElement.play();
+                playPauseButton.textContent = 'Pause';
+            } else {
+                audioElement.pause();
+                playPauseButton.textContent = 'Play';
+            }
+        });
+
+        speedButton.addEventListener('click', () => {
+            playbackSpeed = playbackSpeed === 1 ? 1.5 : 1;
+            audioElement.playbackRate = playbackSpeed;
+            speedButton.textContent = `Speed: ${playbackSpeed}x`;
+        });
+
+        translationForm.addEventListener('submit', async (event) => {
+            event.preventDefault();
+            const formData = new FormData(translationForm);
+
+            try {
+                const response = await fetch('/', {
+                    method: 'POST',
+                    body: formData
+                });
+
+                if (response.ok) {
+                    const result = await response.json();
+                    document.getElementById('translationText').textContent = result.translation;
+                    document.getElementById('translationResult').style.display = 'block';
+                    audioBar.style.display = 'flex';
+
+                    audioSource.src = `/audio/${result.audio_id}`;
+                    audioElement.load();
+                    audioElement.play();
+                    playPauseButton.textContent = 'Pause';
+                } else {
+                    throw new Error('Translation request failed');
+                }
+            } catch (error) {
+                console.error('Error:', error);
+                alert('An error occurred during translation. Please try again.');
+            }
+        });
+
+        function formatTime(seconds) {
+            const minutes = Math.floor(seconds / 60);
+            const remainingSeconds = Math.floor(seconds % 60);
+            return `${minutes}:${remainingSeconds.toString().padStart(2, '0')}`;
+        }
+    </script>
+</body>
+</html>
