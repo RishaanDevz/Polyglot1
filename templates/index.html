@@ -3,231 +3,308 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Polyglot</title>
-
-    <link rel="stylesheet" href="https://stackpath.bootstrapcdn.com/bootstrap/4.5.2/css/bootstrap.min.css">
-    <link rel="stylesheet" href="{{ url_for('static', filename='style.css') }}">
+    <title>Voice Translation Interface</title>
+    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;700&display=swap" rel="stylesheet">
     <style>
-        .audio-bar {
-            position: fixed;
-            bottom: 0;
-            left: 0;
-            width: 100%;
-            background-color: #333;
-            padding: 10px;
-            display: flex;
-            align-items: center;
-            justify-content: center;
-            z-index: 1000;
-        }
-        .audio-controls {
-            display: flex;
-            align-items: center;
-            gap: 10px;
-        }
-        .progress-bar {
-            flex-grow: 1;
-            height: 5px;
-            background-color: #555;
-            cursor: pointer;
-        }
-        .progress {
-            height: 100%;
-            background-color: white;
-            width: 0;
-        }
         body {
-            padding-bottom: 60px;
+            font-family: 'Inter', Arial, sans-serif;
+            display: flex;
+            justify-content: center;
+            align-items: center;
+            height: 100vh;
+            margin: 0;
+            background-color: #000000;
+            color: #ffffff;
+        }
+        .container {
+            text-align: center;
+            width: 100%;
+            max-width: 600px;
+        }
+        .screen {
+            display: none;
+        }
+        .active {
+            display: block;
+        }
+        #languageSelection {
+            margin-bottom: 20px;
+        }
+        select {
+            margin: 5px;
+            padding: 10px;
+            font-size: 16px;
+            background-color: #333;
+            color: #fff;
+            border: none;
+            border-radius: 5px;
+        }
+        button, #recordButton {
+            padding: 10px 20px;
+            font-size: 16px;
+            background-color: #007bff;
+            color: #fff;
+            border: none;
+            border-radius: 5px;
+            cursor: pointer;
+            -webkit-user-select: none;
+            -moz-user-select: none;
+            -ms-user-select: none;
+            user-select: none;
+            -webkit-tap-highlight-color: transparent;
+        }
+        #recordButtonContainer {
+            display: flex;
+            justify-content: center;
+            align-items: center;
+            height: 200px;
+        }
+        #recordButton {
+            width: 200px;
+            height: 200px;
+            border-radius: 50%;
+            background-color: #ffffff;
+            border: none;
+            cursor: pointer;
+            transition: all 0.3s ease;
+        }
+        #recordButton:active {
+            transform: scale(0.95);
+        }
+        #recordButton.listening {
+            animation: pulse 1.5s infinite;
+        }
+        #recordButton.translating {
+            animation: gentlePulse 2s infinite;
+        }
+        @keyframes pulse {
+            0% { transform: scale(1); }
+            50% { transform: scale(1.1); }
+            100% { transform: scale(1); }
+        }
+        @keyframes gentlePulse {
+            0% { transform: scale(1); }
+            50% { transform: scale(1.05); }
+            100% { transform: scale(1); }
+        }
+        #status {
+            margin-top: 20px;
+            font-size: 18px;
+        }
+        #outputAudio {
+            display: none;
+        }
+        #animationContainer {
+            width: 200px;
+            height: 200px;
+            margin: 0 auto;
+            display: none;
+        }
+        #animationContainer img {
+            max-width: 100%;
+            max-height: 100%;
+        }
+        #transcriptionContainer {
+            margin-top: 20px;
+            text-align: center;
+        }
+        .transcription {
+            margin-bottom: 10px;
+            font-size: 24px;
+            font-weight: bold;
+            display: none;
+        }
+        .transcription.active {
+            display: block;
         }
     </style>
 </head>
-<body class="bg-dark text-light">
-    <div class="container mt-5">
-        <a href="https://imgbb.com/"><img src="https://i.ibb.co/kDt7nDC/IMG-3289-removebg-preview.png" alt="IMG-3289-removebg-preview" border="0"></a>
-
-        <form id="translationForm" method="POST">
-            <div class="form-group">
-                <label for="language1" class="text-purple">Source Language:</label>
-                <select name="language1" id="language1" class="form-control bg-secondary text-light">
-                    {% for lang in languages %}
-                        <option value="{{ lang }}">{{ lang }}</option>
-                    {% endfor %}
+<body>
+    <div class="container">
+        <div id="languageScreen" class="screen active">
+            <img src="https://i.ibb.co/kDt7nDC/IMG-3289-removebg-preview.png" alt="IMG-3289-removebg-preview" border="0" style="width: 50%; height: auto;"></a>
+            <h2>Select Languages</h2>
+            <div id="languageSelection">
+                <select id="sourceLanguage">
+                    <option value=""></option>
+                    <!-- Other language options will be added dynamically -->
+                </select>
+                <select id="targetLanguage">
+                    <option value=""></option>
+                    <!-- Other language options will be added dynamically -->
                 </select>
             </div>
-            <div class="form-group">
-                <label for="language2" class="text-purple">Target Language:</label>
-                <select name="language2" id="language2" class="form-control bg-secondary text-light">
-                    {% for lang in languages %}
-                        <option value="{{ lang }}">{{ lang }}</option>
-                    {% endfor %}
-                </select>
-            </div>
-            <div class="form-group">
-                <label for="text" class="text-purple">Text to Translate:</label>
-                <textarea name="text" id="text" class="form-control bg-secondary text-light" required></textarea>
-            </div>
-            <button type="submit" class="btn btn-purple btn-block">Translate and Generate Audio</button>
-        </form>
-
-        <button id="recordButton" class="btn btn-purple btn-block mt-3">Hold Space to Record Audio</button>
-
-        <div id="translationResult" class="mt-4" style="display: none;">
-            <h2 class="text-purple">Translation:</h2>
-            <p id="translationText"></p>
+            <button id="startTranslation">Start Translation</button>
         </div>
 
-        <div id="audioResult" class="mt-4" style="display: none;">
-            <h2 class="text-purple">Audio:</h2>
-            <audio id="audio" hidden>
-                <source id="audioSource" src="" type="audio/wav">
-                Your browser does not support the audio element.
-            </audio>
-        </div>
-    </div>
-
-    <div class="audio-bar" id="audioBar" style="display: none;">
-        <div class="audio-controls">
-            <button id="playPauseButton" class="btn btn-purple">Play</button>
-            <div class="progress-bar">
-                <div class="progress" id="audioProgress"></div>
+        <div id="translationScreen" class="screen">
+            <div id="recordButtonContainer">
+                <button id="recordButton"></button>
             </div>
-            <span id="currentTime">0:00</span> / <span id="duration">0:00</span>
-            <button id="speedButton" class="btn btn-purple">Speed: 1x</button>
+            <div id="animationContainer">
+                <img id="animationGif" src="" alt="Translation Animation" style="width: 300%; height: auto;">
+            </div>
+            <div id="status"></div>
+            <audio id="outputAudio"></audio>
+            <div id="transcriptionContainer">
+                <div id="transcription" class="transcription active"></div>
+            </div>
         </div>
     </div>
 
     <script>
+        const languageScreen = document.getElementById('languageScreen');
+        const translationScreen = document.getElementById('translationScreen');
+        const startTranslationButton = document.getElementById('startTranslation');
+        const recordButton = document.getElementById('recordButton');
+        const status = document.getElementById('status');
+        const outputAudio = document.getElementById('outputAudio');
+        const animationContainer = document.getElementById('animationContainer');
+        const animationGif = document.getElementById('animationGif');
+        const sourceLanguage = document.getElementById('sourceLanguage');
+        const targetLanguage = document.getElementById('targetLanguage');
+        const transcription = document.getElementById('transcription');
         let mediaRecorder;
         let audioChunks = [];
-        const recordButton = document.getElementById('recordButton');
-        const translationForm = document.getElementById('translationForm');
-        const audioElement = document.getElementById('audio');
-        const audioSource = document.getElementById('audioSource');
-        const audioBar = document.getElementById('audioBar');
-        const playPauseButton = document.getElementById('playPauseButton');
-        const audioProgress = document.getElementById('audioProgress');
-        const currentTimeSpan = document.getElementById('currentTime');
-        const durationSpan = document.getElementById('duration');
-        const speedButton = document.getElementById('speedButton');
+        let isRecording = false;
 
-        let playbackSpeed = 1;
+        // Function to request microphone permission
+        async function requestMicrophonePermission() {
+            try {
+                await navigator.mediaDevices.getUserMedia({ audio: true });
+                console.log('Microphone permission granted');
+            } catch (err) {
+                console.error('Error accessing microphone:', err);
+                status.textContent = 'Error: Could not access microphone';
+            }
+        }
 
-        const startRecording = async () => {
-            const stream = await navigator.mediaDevices.getUserMedia({ audio: true });
-            mediaRecorder = new MediaRecorder(stream);
+        // Call the function on page load
+        window.addEventListener('load', requestMicrophonePermission);
 
-            mediaRecorder.ondataavailable = (event) => {
-                audioChunks.push(event.data);
-            };
+        // Populate language dropdowns
+        const languages = ["Detect Language", "English (USA)", "English (UK)", "English (Australia)", "English (Canada)", "Japanese", "Chinese", "German", "Hindi", "French (France)", "French (Canada)", "Korean", "Portuguese (Brazil)", "Portuguese (Portugal)", "Italian", "Spanish (Spain)", "Spanish (Mexico)", "Indonesian", "Dutch", "Turkish", "Filipino", "Polish", "Swedish", "Bulgarian", "Romanian", "Arabic (Saudi Arabia)", "Arabic (UAE)", "Czech", "Greek", "Finnish", "Croatian", "Malay", "Slovak", "Danish", "Tamil", "Ukrainian"];
 
-            mediaRecorder.onstop = async () => {
-                const audioBlob = new Blob(audioChunks, { type: 'audio/wav' });
+        languages.forEach(lang => {
+            if (lang !== "Detect Language") {
+                let option = new Option(lang, lang);
+                targetLanguage.add(option);
+            }
+            let option = new Option(lang, lang);
+            sourceLanguage.add(option);
+        });
+
+        startTranslationButton.addEventListener('click', () => {
+            languageScreen.classList.remove('active');
+            translationScreen.classList.add('active');
+        });
+
+        recordButton.addEventListener('mousedown', startRecording);
+        recordButton.addEventListener('mouseup', stopRecording);
+        recordButton.addEventListener('mouseleave', stopRecording);
+        recordButton.addEventListener('touchstart', startRecording);
+        recordButton.addEventListener('touchend', stopRecording);
+
+        async function startRecording() {
+            if (isRecording) return; // Prevent multiple recordings at the same time
+            isRecording = true;
+            try {
+                const stream = await navigator.mediaDevices.getUserMedia({ audio: true });
+                mediaRecorder = new MediaRecorder(stream);
                 audioChunks = [];
 
-                const formData = new FormData();
-                formData.append('audio', audioBlob, 'recording.wav');
+                mediaRecorder.ondataavailable = (event) => {
+                    audioChunks.push(event.data);
+                };
 
-                try {
-                    const response = await fetch('/transcribe', {
-                        method: 'POST',
-                        body: formData
-                    });
-                    const data = await response.json();
-                    if (data.transcription) {
-                        document.getElementById('text').value = data.transcription;
-                        translationForm.dispatchEvent(new Event('submit'));
-                    } else {
-                        alert('Transcription failed. Please try again.');
-                    }
-                } catch (error) {
-                    console.error('Error:', error);
-                    alert('An error occurred. Please try again.');
-                }
-            };
-
-            mediaRecorder.start();
-            recordButton.textContent = 'Recording...';
-        };
-
-        const stopRecording = () => {
-            if (mediaRecorder && mediaRecorder.state === "recording") {
-                mediaRecorder.stop();
-                recordButton.textContent = 'Hold Space to Record Audio';
+                mediaRecorder.start();
+                recordButton.classList.add('listening');
+                status.textContent = 'Listening...';
+                transcription.textContent = '';
+            } catch (err) {
+                console.error('Error accessing microphone:', err);
+                status.textContent = 'Error: Could not access microphone';
             }
-        };
-
-        document.addEventListener('keydown', (event) => {
-            if (event.code === 'Space' && mediaRecorder?.state !== "recording") {
-                startRecording();
-            }
-        });
-
-        document.addEventListener('keyup', (event) => {
-            if (event.code === 'Space' && mediaRecorder?.state === "recording") {
-                stopRecording();
-            }
-        });
-
-        audioElement.addEventListener('loadedmetadata', () => {
-            durationSpan.textContent = formatTime(audioElement.duration);
-        });
-
-        audioElement.addEventListener('timeupdate', () => {
-            const progress = (audioElement.currentTime / audioElement.duration) * 100;
-            audioProgress.style.width = `${progress}%`;
-            currentTimeSpan.textContent = formatTime(audioElement.currentTime);
-        });
-
-        playPauseButton.addEventListener('click', () => {
-            if (audioElement.paused) {
-                audioElement.play();
-                playPauseButton.textContent = 'Pause';
-            } else {
-                audioElement.pause();
-                playPauseButton.textContent = 'Play';
-            }
-        });
-
-        speedButton.addEventListener('click', () => {
-            playbackSpeed = playbackSpeed === 1 ? 1.5 : 1;
-            audioElement.playbackRate = playbackSpeed;
-            speedButton.textContent = `Speed: ${playbackSpeed}x`;
-        });
-
-        translationForm.addEventListener('submit', async (event) => {
-            event.preventDefault();
-            const formData = new FormData(translationForm);
-
-            try {
-                const response = await fetch('/', {
-                    method: 'POST',
-                    body: formData
-                });
-
-                if (response.ok) {
-                    const result = await response.json();
-                    document.getElementById('translationText').textContent = result.translation;
-                    document.getElementById('translationResult').style.display = 'block';
-                    audioBar.style.display = 'flex';
-
-                    audioSource.src = `/audio/${result.audio_id}`;
-                    audioElement.load();
-                    audioElement.play();
-                    playPauseButton.textContent = 'Pause';
-                } else {
-                    throw new Error('Translation request failed');
-                }
-            } catch (error) {
-                console.error('Error:', error);
-                alert('An error occurred during translation. Please try again.');
-            }
-        });
-
-        function formatTime(seconds) {
-            const minutes = Math.floor(seconds / 60);
-            const remainingSeconds = Math.floor(seconds % 60);
-            return `${minutes}:${remainingSeconds.toString().padStart(2, '0')}`;
         }
+
+        function stopRecording() {
+            if (mediaRecorder && mediaRecorder.state !== 'inactive') {
+                mediaRecorder.stop();
+                recordButton.classList.remove('listening');
+                recordButton.classList.add('translating');
+                status.textContent = 'Translating...';
+
+                mediaRecorder.onstop = () => {
+                    const audioBlob = new Blob(audioChunks, { type: 'audio/wav' });
+                    sendAudioToServer(audioBlob);
+                    isRecording = false;
+                };
+            }
+        }
+
+        function sendAudioToServer(audioBlob) {
+            const formData = new FormData();
+            formData.append('audio', audioBlob, 'recording.wav');
+
+            fetch('/transcribe', {
+                method: 'POST',
+                body: formData
+            })
+            .then(response => response.json())
+            .then(data => {
+                if (data.error) {
+                    throw new Error(data.error);
+                }
+                transcription.textContent = `${data.transcription}`;
+                return fetch('/', {
+                    method
+
+: 'POST',
+                    headers: {
+                        'Content-Type': 'application/x-www-form-urlencoded',
+                    },
+                    body: new URLSearchParams({
+                        'language1': sourceLanguage.value,
+                        'language2': targetLanguage.value,
+                        'text': data.transcription
+                    })
+                });
+            })
+            .then(response => response.json())
+            .then(data => {
+                if (data.error) {
+                    throw new Error(data.error);
+                }
+                transcription.textContent = `${data.translation}`;
+                playTranslatedAudio(data.audio_id);
+                showTranslationAnimation();
+            })
+            .catch(error => {
+                console.error('Error:', error);
+                status.textContent = `Error: ${error.message}`;
+            })
+            .finally(() => {
+                recordButton.classList.remove('translating');
+            });
+        }
+
+        function playTranslatedAudio(audioId) {
+            outputAudio.src = `/audio/${audioId}`;
+            outputAudio.play();
+            status.textContent = 'Playing translation...';
+        }
+
+        function showTranslationAnimation() {
+            recordButton.style.display = 'none';
+            animationContainer.style.display = 'block';
+            animationGif.src = 'https://cdn.glitch.global/3289985a-0d65-4258-8756-ee33bd8de56c/ezgif-1-d3c089d4a6.gif?v=1720235958093';
+        }
+
+        outputAudio.onended = () => {
+            status.textContent = 'Translation complete';
+            animationContainer.style.display = 'none';
+            recordButton.style.display = 'block';
+        };
     </script>
 </body>
 </html>
