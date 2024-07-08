@@ -3,6 +3,7 @@ import uuid
 import wave
 import logging
 from flask import Flask, render_template, request, send_file, jsonify
+from elevenlabs import Voice, VoiceSettings, play
 from elevenlabs.client import ElevenLabs
 from dotenv import load_dotenv
 from deepgram import DeepgramClient, PrerecordedOptions
@@ -69,8 +70,8 @@ def text_to_speech(text):
 
         audio_stream = elevenlabs_client.generate(
             text=text,
-            voice="Alice",
             model="eleven_multilingual_v2",
+            voice="Alice",
             stream=True)
 
         os.makedirs(os.path.dirname(output_filename), exist_ok=True)
@@ -90,14 +91,18 @@ def text_to_speech(text):
 
 def translate_text(language1, language2, text):
     try:
-        prompt = f"""You are polyglot, an advanced AI translator. you can translate from {language1} to {language2}, as well as {language2} to {language1}. Let us play out a scenario for your expected response:
-        Language1: Hello how are you
-        Polyglot: Bonjour comment ca va?
-        Language2: Ca va bein, et tu?
-        Polyglot: I am good, and you?
+        prompt = f"""You are Polyglot, an advanced AI translator capable of translating between {language1} and {language2} and {language2} and {language1}. Your task is to provide direct translations without any additional commentary or explanations. 
 
-        You will act like this for all scenarios and speak on behalf of the user and only change your response based on the input text and languages. 
-        Only provide the translation, nothing else: {text}."""
+Examples:
+Input: Hello how are you
+Output: Bonjour comment ça va?
+
+Input: Ça va bien, et toi?
+Output: I'm doing well, and you?
+
+Translate the following text. Provide only the translation, without any additional text:
+
+{text}"""
 
         chat_session = model.start_chat(history=[])
         response = chat_session.send_message(prompt)
@@ -148,11 +153,14 @@ def index():
         language2 = request.form['language2']
         text = request.form['text']
         try:
+            app.logger.info(f"Translating from {language1} to {language2}: {text}")
             translation = translate_text(language1, language2, text)
+            app.logger.info(f"Translation result: {translation}")
             audio_id = text_to_speech(translation)
+            app.logger.info(f"Generated audio ID: {audio_id}")
             return jsonify({'translation': translation, 'audio_id': audio_id})
         except Exception as e:
-            logging.error(f"Error processing POST request: {e}")
+            app.logger.error(f"Error processing POST request: {e}", exc_info=True)
             return jsonify({'error': str(e)}), 500
     return render_template('index.html', languages=SUPPORTED_LANGUAGES)
 
@@ -173,7 +181,7 @@ def cleanup_old_audio_files():
         file_path = os.path.join(audio_dir, filename)
         file_modified = datetime.fromtimestamp(os.path.getmtime(file_path))
         if current_time - file_modified > timedelta(
-                minutes=3):  # Delete files older than 3 minutes
+                minutes=3):  # Delete files older than 3 minutes 
             os.remove(file_path)
 
 
@@ -183,7 +191,3 @@ def cleanup_old_audio_files():
 @app.before_request
 def before_request():
     cleanup_old_audio_files()
-
-
-if __name__ == '__main__':
-    app.run(debug=True)
